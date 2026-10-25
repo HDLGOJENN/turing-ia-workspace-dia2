@@ -1,0 +1,12 @@
+
+# Evidencias con información personal
+evidencias/
+
+# Archivos de configuración privada
+.env
+.env.*
+
+# Dependencias y archivos temporales
+node_modules/
+.DS_Store
+Thumbs.db
