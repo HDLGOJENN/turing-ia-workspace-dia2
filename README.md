@@ -30,7 +30,7 @@ dia2-workspace/
 ## 4. Funcionalidades
 
 - Registro y seguimiento de tareas en Google Sheets.
-- Cálculo manual de días restantes.
+- Cálculo de días restantes mediante ejecución manual y programación de un activador temporal diario.
 - Validación de fechas y correos electrónicos.
 - Identificación de tareas urgentes según prioridad y estado.
 - Envío automático de notificaciones mediante Gmail.
@@ -38,6 +38,12 @@ dia2-workspace/
 - Registro de notificaciones enviadas e identificadores de eventos.
 - Comprobaciones para reducir acciones duplicadas.
 - Registro de ejecuciones y errores para facilitar el diagnóstico.
+
+### Actualización programada de vencimientos
+
+Se preparó la configuración de un activador temporal diario para ejecutar `calcularDiasRestantes()` entre las 8:00 y las 9:00 a. m.
+
+Su objetivo es actualizar automáticamente la columna H de Google Sheets con los días restantes de cada tarea.
 
 ## 5. Flujo de automatización
 
@@ -49,6 +55,20 @@ dia2-workspace/
 6. Si la tarea es de prioridad Alta, está Pendiente y no ha sido notificada, se envía un correo.
 7. Si la tarea no está Completada y no tiene un ID de evento, se crea un evento en Calendar.
 8. Los resultados se registran en Google Sheets.
+
+El sistema contempla un segundo flujo independiente:
+
+El activador temporal inicia calcularDiasRestantes() en el horario diario configurado.
+
+La función consulta las tareas registradas en Google Sheets.
+
+Valida las fechas límite y revisa el estado de cada tarea.
+
+Calcula los días restantes para las tareas activas.
+
+Actualiza la columna H con los resultados.
+
+Este flujo no envía correos ni crea eventos de Calendar. Su función es mantener actualizados los vencimientos.
 
 ## 6. Reglas de negocio
 
@@ -73,7 +93,7 @@ Se crea un evento cuando:
 
 | Función | Responsabilidad |
 |---|---|
-| `calcularDiasRestantes()` | Calcula y actualiza los días restantes. |
+| `calcularDiasRestantes()` | Calcula y actualiza los días restantes;  puede ejecutarse manualmente o mediante un activador temporal diario. |
 | `diagnosticarFechas()` | Inspecciona los tipos de datos de fechas. |
 | `enviarNotificacionPrueba()` | Prueba manual de correo para T001. |
 | `crearEventoCalendarioPrueba()` | Prueba manual de Calendar para T001. |
@@ -125,7 +145,22 @@ La pestaña debe llamarse `Tareas` y contener las siguientes columnas:
 
 El trigger reacciona a modificaciones individuales realizadas en la columna G de la pestaña `Tareas`.
 
-### 8.4 Ejecución
+### 8.4 Configuración del activador temporal
+
+Para programar la actualización diaria de los vencimientos:
+
+1. Abrir **Activadores** en Google Apps Script.
+2. Seleccionar **Añadir activador**.
+3. Elegir la función `calcularDiasRestantes`.
+4. Seleccionar la implementación principal.
+5. Elegir **Basado en el tiempo** como origen del evento.
+6. Seleccionar **Cronómetro por día**.
+7. Establecer el horario de 8:00 a 9:00 a. m.
+8. Guardar y comprobar que aparezca en la lista de activadores.
+
+Este activador reutiliza la función existente, por lo que no fue necesario modificar `Codigo.gs`.
+
+### 8.5 Ejecución
 
 **Manual:**
 
@@ -141,6 +176,10 @@ Al modificar individualmente el estado de una tarea, `alEditarTarea(e)` identifi
 El sistema evalúa si corresponde enviar una notificación, crear un evento o no realizar ninguna acción.
 
 Las acciones se ejecutan mediante la cuenta que autorizó el activador.
+
+La función `calcularDiasRestantes()` también puede ejecutarse mediante un activador basado en tiempo, de forma independiente del trigger de edición.
+
+Cuando se ejecute en el horario programado, actualizará la columna H sin necesidad de modificar el estado de las tareas.
 
 ## 9. Pruebas realizadas
 
@@ -243,7 +282,7 @@ El proyecto implementa un prototipo funcional de automatización de tareas media
 El sistema permite:
 
 1. Registrar y administrar tareas en Google Sheets.
-2. Calcular manualmente días restantes.
+2. Calcular días restantes mediante ejecución manual y disponer de una configuración de activador temporal diario.
 3. Evaluar prioridades y estados.
 4. Validar información necesaria para el procesamiento.
 5. Enviar notificaciones automáticas por Gmail.

@@ -2,79 +2,116 @@
 
 ## 1. Descripción general
 
-El proyecto implementa una arquitectura basada en eventos utilizando Google Workspace y Google Apps Script.
+El proyecto utiliza Google Sheets como repositorio principal de tareas, Google Apps Script como lógica de automatización y Gmail y Google Calendar como canales de acción.
 
-Google Sheets funciona como repositorio principal de tareas. Google Apps Script contiene la lógica de evaluación y procesamiento, mientras que Gmail y Google Calendar permiten ejecutar las acciones correspondientes.
+La arquitectura contempla dos flujos de automatización independientes:
+
+- **Activador de edición:** procesa modificaciones en el estado de las tareas para generar notificaciones y eventos.
+- **Activador temporal diario:** programa la ejecución de `calcularDiasRestantes()` para actualizar los vencimientos en Google Sheets.
+
+Esta separación permite mantener responsabilidades específicas para cada proceso.
 
 ## 2. Diagrama de arquitectura
 
 ```mermaid
 flowchart TD
-    A["Usuario modifica Estado en Google Sheets"] --> B["Trigger instalable: Al editar"]
+    A["Usuario modifica Estado en Sheets"] --> B["Trigger instalable: Al editar"]
     B --> C["alEditarTarea(e)"]
-    C --> D{"Edición válida en columna G?"}
+    C --> D{"¿Edición individual en G y hoja Tareas?"}
     D -->|No| E["Finalizar sin acciones"]
     D -->|Sí| F["evaluarTarea(fila)"]
     F --> G["procesarTareaAutomatica(fila)"]
-    G --> H["LockService y nueva evaluación"]
-    H --> I{"Necesita notificación?"}
+    G --> H["LockService: bloqueo y nueva evaluación"]
+    H --> I{"¿Necesita notificación?"}
     I -->|Sí| J["MailApp: enviar correo"]
-    J --> K["Sheets: guardar Enviado y fecha"]
-    I -->|No| L{"Necesita evento?"}
+    J --> K["Sheets: Enviado y fecha"]
+    I -->|No| L{"¿Necesita evento?"}
     K --> L
     L -->|Sí| M["CalendarApp: crear evento"]
     M --> N["Sheets: guardar ID del evento"]
     L -->|No| O["Finalizar procesamiento"]
     N --> O
+
+    P["Trigger temporal diario: 8:00–9:00 a. m."] --> Q["calcularDiasRestantes()"]
+    Q --> R["Lee fechas y estados en Sheets"]
+    R --> S["Actualiza columna H"]
 ```
 
 ## 3. Componentes
 
 | Componente | Responsabilidad |
 |---|---|
-| Google Sheets | Almacenar tareas y resultados |
-| Trigger instalable | Detectar ediciones |
-| `alEditarTarea(e)` | Validar el evento e identificar la fila |
-| `evaluarTarea(fila)` | Comprobar condiciones de negocio |
-| `procesarTareaAutomatica(fila)` | Coordinar y ejecutar las acciones |
-| LockService | Reducir conflictos de concurrencia |
-| MailApp | Enviar notificaciones |
-| CalendarApp | Crear eventos de seguimiento |
-| Registros de ejecución | Facilitar el diagnóstico |
+| Google Sheets | Almacenar tareas, vencimientos y resultados |
+| Trigger instalable de edición | Detectar ediciones individuales de Estado (columna G) |
+| `alEditarTarea(e)` | Validar evento, hoja, fila y columna |
+| `evaluarTarea(fila)` | Decidir si hacen falta notificación o evento |
+| `procesarTareaAutomatica(fila)` | Coordinar operaciones y ejecutarlas |
+| `LockService` | Reducir conflictos entre ejecuciones simultáneas |
+| `MailApp` | Enviar notificaciones de tareas urgentes |
+| `CalendarApp` | Crear eventos de seguimiento |
+| Trigger temporal diario | Programar la actualización diaria de vencimientos |
+| `calcularDiasRestantes()` | Calcular días restantes y escribirlos en H |
+| Registros de Apps Script | Facilitar la revisión de ejecuciones y errores |
 
-## 4. Flujo de datos
+## 4. Flujo de edición
 
-1. El usuario modifica individualmente una celda de Estado en la columna G.
-2. El trigger ejecuta `alEditarTarea(e)`.
-3. Se comprueba que la edición corresponda a la pestaña `Tareas` y a una fila válida.
-4. `evaluarTarea(fila)` consulta los datos y determina qué acciones hacen falta.
-5. `procesarTareaAutomatica(fila)` obtiene un bloqueo y vuelve a evaluar la tarea.
-6. Si corresponde, MailApp envía una notificación y registra el resultado en Sheets.
-7. Si corresponde, CalendarApp crea un evento de día completo y guarda su identificador.
-8. Se registran los resultados del procesamiento.
+1. El usuario modifica una celda de Estado (G) en `Tareas`.
+2. `alEditarTarea(e)` comprueba la edición y determina la fila.
+3. `evaluarTarea(fila)` consulta y valida la tarea.
+4. `procesarTareaAutomatica(fila)` obtiene un bloqueo y vuelve a evaluar.
+5. Si corresponde, `MailApp` envía correo y registra `Enviado` y la fecha en las columnas I y K.
+6. Si corresponde, `CalendarApp` crea un evento de día completo y guarda su ID en la columna J.
+7. Se registran mensajes de ejecución para facilitar el seguimiento.
 
-## 5. Decisiones de diseño
+## 5. Flujo temporal diario
+
+1. Se establece un activador basado en tiempo con frecuencia diaria, dentro del intervalo de **8:00 a 9:00 a. m.**
+2. El activador está asociado a `calcularDiasRestantes()`.
+3. La función consulta los identificadores, fechas límite y estados registrados en Google Sheets.
+4. Para cada tarea válida calcula los días restantes; identifica las tareas completadas y las fechas inválidas.
+5. Actualiza la columna H con los resultados.
+6. Registra la finalización del procesamiento mediante los registros de Apps Script.
+
+El horario corresponde a una ventana de ejecución programada y no a una hora exacta.
+
+La función `calcularDiasRestantes()` fue ejecutada manualmente con resultados satisfactorios para las tareas T001–T007.
+
+## 6. Decisiones de diseño
 
 ### Separación de responsabilidades
 
-Se dividió la automatización en funciones diferentes para separar la detección, evaluación y ejecución de acciones.
+El sistema divide la detección, evaluación y ejecución de acciones en funciones independientes.
 
-### Validación de datos
+El cálculo diario utiliza un activador separado del procesamiento de cambios de estado.
 
-Se comprueban campos obligatorios, fechas y formato del destinatario para reducir errores.
+### Validaciones
+
+Se comprueba la existencia de la hoja, la validez de las filas, los campos obligatorios, las fechas y el formato del correo cuando corresponde.
 
 ### Prevención de duplicados
 
-Se utilizan los campos `Notificación` e `ID evento` para identificar acciones previamente registradas.
+Se consultan las columnas I (`Enviado`) y J (ID del evento) antes de ejecutar acciones externas.
 
 ### Control de concurrencia
 
-Se implementó `LockService` para reducir conflictos cuando existen ejecuciones simultáneas.
+Se utiliza `LockService` para reducir conflictos entre ejecuciones simultáneas del procesamiento de tareas.
 
-## 6. Limitaciones
+### Reutilización del código
 
-- Solo se procesan automáticamente ediciones individuales en la columna G.
-- Los días restantes se actualizan mediante ejecución manual.
-- No se actualizan ni eliminan eventos existentes.
+El activador temporal utiliza la función `calcularDiasRestantes()` desarrollada previamente, sin necesidad de modificar su lógica.
+
+### Independencia de los activadores
+
+- El activador de edición ejecuta las reglas de Gmail y Calendar.
+- El activador temporal actualiza los cálculos de vencimiento en Sheets.
+
+De esta forma, las tareas de mantenimiento diario no provocan envíos de correos ni creación de eventos.
+
+## 7. Limitaciones
+
+- Las notificaciones y los eventos se procesan automáticamente cuando se edita individualmente una celda de la columna G.
+- El activador temporal se encarga únicamente del cálculo de días restantes; no envía recordatorios por correo.
+- No se actualizan ni eliminan eventos existentes cuando cambia una fecha o se completa una tarea.
 - No se garantiza procesamiento exactamente una vez ante fallos parciales.
-- Las integraciones utilizan los permisos de la cuenta que autorizó el trigger.
+- Los activadores utilizan los permisos de la cuenta de Google que los creó y autorizó.
+- La administración empresarial de usuarios, grupos y políticas de Google Workspace se encuentra fuera del alcance de la implementación realizada.
