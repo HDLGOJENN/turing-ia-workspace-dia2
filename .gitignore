@@ -1,7 +1,3 @@
-
-# Evidencias con información personal
-evidencias/
-
 # Archivos de configuración privada
 .env
 .env.*
